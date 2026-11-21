@@ -8,14 +8,10 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: build-shell
-  cancel-in-progress: true
-
 jobs:
   build:
     if: github.actor != 'github-actions[bot]'
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,7 +22,8 @@ jobs:
           git config user.name "shell-bot"
           git config user.email "shell-bot@users.noreply.github.com"
           mkdir -p out
-          echo "probe ok $(date -u)" > out/probe.txt
+          sw_vers > out/probe.txt
+          xcodebuild -version >> out/probe.txt
           git add out/probe.txt
           git commit -m "ci: probe [skip ci]" || true
           git push || true
