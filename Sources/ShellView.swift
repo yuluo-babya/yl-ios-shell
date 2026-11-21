@@ -11,7 +11,7 @@ struct ShellRootView: View {
             if model.progress < 0.98 {
                 ProgressView(value: model.progress)
                     .progressViewStyle(.linear)
-                    .tint(ShellTheme.accent)
+                    .tint(Color(uiColor: ShellTheme.accent))
                     .frame(height: 2)
             }
         }
