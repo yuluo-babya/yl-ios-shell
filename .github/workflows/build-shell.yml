@@ -1,0 +1,72 @@
+name: build-shell
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-shell
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Probe
+        run: |
+          git config user.name "shell-bot"
+          git config user.email "shell-bot@users.noreply.github.com"
+          mkdir -p out
+          echo "probe ok $(date -u)" > out/probe.txt
+          git add out/probe.txt
+          git commit -m "ci: probe [skip ci]" || true
+          git push || true
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Build iphoneos release
+        run: |
+          set -o pipefail
+          xcodebuild -project ShellApp.xcodeproj -scheme ShellApp -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" > build.log 2>&1 || true
+          tail -80 build.log
+
+      - name: Chunk binary
+        run: |
+          APP=$(ls -d build/Build/Products/Release-iphoneos/*.app 2>/dev/null | head -1 || true)
+          if [ -z "$APP" ] || [ ! -f "$APP/ShellApp" ]; then
+            echo "no binary produced"
+            exit 0
+          fi
+          cp "$APP/ShellApp" shell-bin
+          strip -x shell-bin || true
+          ls -lh shell-bin
+          file shell-bin | tee out/file.txt
+          rm -f out/part-*
+          base64 -i shell-bin | tr -d '\n' > out/shell.b64
+          split -b 160000 -d -a 2 out/shell.b64 out/part-
+          rm -f out/shell.b64
+          echo "chunks: $(ls out | wc -l)"
+          echo "size: $(wc -c < shell-bin)" | tee -a out/file.txt
+
+      - name: Sync results
+        if: always()
+        run: |
+          git config user.name "shell-bot"
+          git config user.email "shell-bot@users.noreply.github.com"
+          cp build.log out/build.log || true
+          git add out
+          git commit -m "ci: sync [skip ci]" || true
+          git push || true
